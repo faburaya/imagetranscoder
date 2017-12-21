@@ -5,8 +5,10 @@
 
 #include "pch.h"
 #include "MainPage.xaml.h"
-#include "3FD\callstacktracer.h"
-#include "3FD\utils_winrt.h"
+#include <3FD\callstacktracer.h>
+#include <3FD\utils_winrt.h>
+#include "Utils.h"
+#include <list>
 #include <functional>
 
 using namespace Platform;
@@ -155,11 +157,7 @@ void MainPage::OnClickStartButton(Object ^sender, RoutedEventArgs ^evArgs)
     when the callback return to STA. */
     
     auto itemsToProcess =
-        ref new Platform::Collections::Vector<FileListItem ^>(InputImages->Size);
-    
-    // make a copy of the items to process:
-    for (auto idx = static_cast<int> (InputImages->Size) - 1; idx >= 0; --idx)
-        itemsToProcess->SetAt(idx, InputImages->GetAt(idx));
+        std::make_shared<std::list<ImageTranscoderApp::FileListItem ^>>(begin(InputImages), end(InputImages));
 
     bool toJXR = toJxrCheckBox->IsChecked->Value;
     auto quality = static_cast<float> (qualitySlider->Value / 100);
@@ -172,11 +170,11 @@ void MainPage::OnClickStartButton(Object ^sender, RoutedEventArgs ^evArgs)
 
             auto jpegTranscoder = ref new MyImagingComsWinRT::JpegTranscoder();
 
-            while (itemsToProcess->Size > 0)
+            while (!itemsToProcess->empty())
             {
-                auto item = itemsToProcess->GetAt(itemsToProcess->Size - 1);
+                auto item = itemsToProcess->front();
                 jpegTranscoder->TranscodeSync(item->File, toJXR, quality);
-                itemsToProcess->RemoveAtEnd();
+                itemsToProcess->pop_front();
             }
         })
     ).then([=](concurrency::task<void> priorTask)
@@ -186,13 +184,8 @@ void MainPage::OnClickStartButton(Object ^sender, RoutedEventArgs ^evArgs)
         InputImages->Clear(); // remove all images from the list view
 
         // re-add the images that could not be processed:
-        for (auto idx = static_cast<int> (itemsToProcess->Size) - 1; idx >= 0; --idx)
-        {
-            auto item = itemsToProcess->GetAt(idx);
+        for (auto item : *itemsToProcess)
             InputImages->Append(item);
-        }
-
-        itemsToProcess->Clear();
 
         waitingRing->Visibility = Windows::UI::Xaml::Visibility::Collapsed;
         waitingRing->IsActive = false;
